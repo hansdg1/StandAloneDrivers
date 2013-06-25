@@ -1,4 +1,5 @@
 @ECHO off
+net stop "FOG Service"
 ::Except otherwise noted, the open-source code of the DP_Install_Tool.cmd file is © 2011-2012 by Erik Hansen for DriverPacks.net, under a Creative Commons Attribution-ShareAlike license: http://creativecommons.org/licenses/by-sa/3.0/.
 ::7-Zip is open source software by Igor Pavlov. Most of the source code is under the GNU LGPL license. The unRAR code is under a mixed license: GNU LGPL + unRAR restrictions. Check license information here: http://www.7-zip.org/license.txt or http://www.gnu.org/licenses/lgpl.html
 ::DPInst.exe is proprietary code owned completely by Microsoft and distributed under their own license. (see .\bin\*\dpinst-license.rtf)
@@ -214,7 +215,7 @@ ECHO        Answer Y/N  (Y- will keep all drivers unless deleted manually)
 ECHO      ********************************************************************
 
 :KTD-option
-SET /p option=[Y,N]?
+SET option=n
 IF /I "%option%"=="Y" SET "KTD=Y"
 IF /I "%KTD%"=="Y" ECHO KTD option has been enabled. 
 
@@ -227,7 +228,7 @@ ECHO            Answer Y/N  (N- will use all drivers from every folder)
 ECHO      ********************************************************************
 
 :CLEAN-option
-SET /p option=[Y,N]?
+SET option=y
 IF /I "%option%"=="Y" SET "CLEAN=Y"
 IF /I "%CLEAN%"=="Y" ECHO Unnecessary drivers will be deleted prior to integration. 
 
@@ -316,7 +317,7 @@ IF /I "%OSTYPE%"=="WIN7" (
   ECHO drivers will be deleted from "%SystemDrive%\D\%ARCHP%\Vista\" )
 IF /I "%SILENT%"=="Y" GOTO CLEAN-folder
 ECHO This is your final warning before drivers are deleted from unneeded OS folders.
-pause
+
 
 :CLEAN-folder
 IF /I "%OSTYPE%"=="SERVER" (
@@ -330,7 +331,7 @@ IF /I "%OSTYPE%"=="WIN7" (
   RD /S /Q "%SystemDrive%\D\%ARCHP%\Vista\" )
 ECHO Excess drivers deleted!  
 IF /I "%SILENT%"=="Y" GOTO Begin2
-pause
+
 
 :Begin2
 %SystemDrive% & cd %SystemDrive%\D
@@ -390,6 +391,10 @@ ECHO      *********************************************************************
 :Done
 popd
 endlocal
+cscript //B "%windir%\system32\slmgr.vbs" /ato
+%windir%\Resources\Themes\aero.theme
+shutdown -r -c "Drivers installed. Restarting."
+START C:\Drivers\RemoveD.cmd
 EXIT
 del %0
 
