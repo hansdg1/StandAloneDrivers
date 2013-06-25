@@ -321,7 +321,7 @@ ECHO. & ECHO Extracting the DriverPacks %F_OSbit%-bit core files.
 IF /I "%F_7Zip%"=="Y" (
   Start /wait /separate /high /min "" "%O_7ZipExe%" x "%D_CurrentDirectory%\bin\%F_OSbit%\dpinst-%F_OSBuild%.7z" -o"%SystemDrive%\D\"
   ) ELSE (
-  Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" "%D_CurrentDirectory%\bin\%F_OSbit%\dpinst-%F_OSBuild%.7z" %SystemDrive%\D\
+  Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" -aoa "%D_CurrentDirectory%\bin\%F_OSbit%\dpinst-%F_OSBuild%.7z" %SystemDrive%\D\
 )
 
 :Method1
@@ -354,8 +354,8 @@ IF "%F_Method%"=="2" (
     FOR %%f IN ("%D_DPSLocation%\DP_*.7z") DO (
       @TITLE -Working- !T_Title! !F_TempDPScount! of %F_dpsCount%
       ECHO Extracting DriverPack !F_TempDPScount! of %F_dpsCount%
-      IF /I "%F_OSBuild%"=="NT5" (Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" "%%f" %SystemDrive%\)
-      IF /I "%F_OSBuild%"=="NT6" (Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" "%%f" %SystemDrive%\D\)
+      IF /I "%F_OSBuild%"=="NT5" (Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" -aoa "%%f" %SystemDrive%\)
+      IF /I "%F_OSBuild%"=="NT6" (Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" -aoa "%%f" %SystemDrive%\D\)
       SET /a "F_TempDPScount=!F_TempDPScount!+1"
       )
     )
@@ -366,7 +366,7 @@ IF "%F_Method%"=="2" (
   IF /I "%F_7Zip%"=="Y" (
     Start /wait /separate /high /min "" "%O_7ZipExe%" x "%D_CurrentDirectory%\bin\DPsFnshr.7z" -o"%SystemDrive%\"
     ) ELSE (
-    Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" "%D_CurrentDirectory%\bin\DPsFnshr.7z" %SystemDrive%\
+    Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" -aoa "%D_CurrentDirectory%\bin\DPsFnshr.7z" %SystemDrive%\
     )
   %SystemDrive% & cd %SystemDrive%\D
   ECHO>"%O_DPSFinisherINI%" [Settings]
@@ -383,9 +383,9 @@ ECHO>>"%O_DPSFinisherINI%" logLocation = "%SystemRoot%"
 :Begin
 IF /I NOT EXIST "%SystemDrive%\Touchpad HID\" MD "%SystemDrive%\Touchpad HID\"
 IF /I "%F_OSBuild%"=="NT6" (
-  FOR %%f IN ("%D_DPSLocation%\DP_Touchpad*.7z") DO Start /wait /separate /high /min "" "%O_7ZipExe%" x "%%f" -o"%SystemDrive%\Touchpad HID\"
+  FOR %%f IN ("%D_DPSLocation%\DP_Touchpad*.7z") DO Start /wait /separate /high /min "" "%O_7ZipExe%" x "%%f" -aoa -o"%SystemDrive%\Touchpad HID\"
   ) ELSE (
-  FOR %%f IN ("%D_DPSLocation%\DP_HID*.7z") DO Start /wait /separate /high /min "" "%O_7ZipExe%" x "%%f" -o"%SystemDrive%\Touchpad HID\"
+  FOR %%f IN ("%D_DPSLocation%\DP_HID*.7z") DO Start /wait /separate /high /min "" "%O_7ZipExe%" x "%%f" -aoa -o"%SystemDrive%\Touchpad HID\"
 )
 :: Remove known problem Touchpad HID drivers from driver pool
 FOR %%i IN ("%SystemDrive%\D\Known-problems*.txt") DO (FOR /F "eol=; tokens=* delims=" %%D IN (%%i) DO (IF /I EXIST "%SYSTEMDRIVE%\D\%%D" RENAME "%SYSTEMDRIVE%\D\%%D" "%%~nxD.bak"))
