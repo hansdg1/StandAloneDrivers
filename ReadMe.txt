@@ -44,3 +44,37 @@ NT6\x86\
 -Method-1: Extract the contents of all DriverPacks to the NT6\x86\D\ folder so that the folder heirarchy looks like this: \NT6\x86\D\*.  Method 1 will fail if the \NT6\x86\ folder contains any .7z DriverPacks.
 -Method-2 (preferred): 32-bit Vista/Win7 DriverPacks go here in their compressed state.  An empty "Example" DriverPack is included for reference.  Method 2 will fail if the \NT6\x86\D\ folder exists here, only .7z packs must be present.
 
+How to add ISO's:
+%WinXP-Disc%\$oem$\$1\ (entire contents of SAD3 folder with all DriverPacks goes here %systemdrive%\)
+%WinXP-Disc%\$oem$\$1\DP_Install_Tool.cmd
+Call the Dp_Install_Tool.cmd from winnt.sif file which will go in %WinXP-Disc\I386\WINNT.SIF
+
+%Win7-Disc%\sources\$oem$\$1\ (entire contents of SAD3 folder with all DriverPacks goes here %systemdrive%\)
+%Win7-Disc%\sources\$oem$\$1\DP_Install_Tool.cmd
+%Win7-Disc%\sources\$oem$\$$\Setup\scripts\setupcomplete.cmd
+
+%Win8-Disc%\sources\$oem$\$1\ (entire contents of SAD3 folder with all DriverPacks goes here %systemdrive%\)
+%Win8-Disc%\sources\$oem$\$1\DP_Install_Tool.cmd
+%Win8-Disc%\sources\$oem$\$$\Setup\scripts\firstlogon.cmd
+
+In the :SD :BYE switch the EXIT and DEL %0 around so the DP_Install_Tool.cmd will delete itself.
+DEL %0
+EXIT
+
+Add the following code to the setupcomplete.cmd or firstlogon.cmd file...
+
+@echo off
+START %systemdrive%\DP_Install_Tool.cmd /s or what ever switch you wish to use.
+DEL %0
+
+Example of switches:
+"/S"  Silent install, Touchpad/HID drivers kept, exit no reboot.
+"/SR" Silent install, Touchpad/HID drivers kept, exit and auto reboot.
+
+"/K"  Silent install, keeps only drivers for your OS, exit no reboot.
+"/KR" Silent install, keeps only drivers for your OS, exit and auto reboot.
+     
+"/C"  Silent install, keeps all drivers, exit no reboot.
+"/CR" Silent install, keeps all drivers, exit and auto reboot.
+
+Use Only One Silent Install Switch!

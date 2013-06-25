@@ -1,18 +1,89 @@
-@ECHO off
-net stop "FOG Service"
-::Except otherwise noted, the open-source code of the DP_Install_Tool.cmd file is © 2011-2012 by Erik Hansen for DriverPacks.net, under a Creative Commons Attribution-ShareAlike license: http://creativecommons.org/licenses/by-sa/3.0/.
+
+@ECHO off & setlocal EnableDelayedExpansion
+
+::Except otherwise noted, the open-source code of the DP_Install_Tool.cmd file is Â© 2011-2013 by Erik Hansen for DriverPacks.net, under a Creative Commons Attribution-ShareAlike license: http://creativecommons.org/licenses/by-sa/3.0/.
 ::7-Zip is open source software by Igor Pavlov. Most of the source code is under the GNU LGPL license. The unRAR code is under a mixed license: GNU LGPL + unRAR restrictions. Check license information here: http://www.7-zip.org/license.txt or http://www.gnu.org/licenses/lgpl.html
 ::DPInst.exe is proprietary code owned completely by Microsoft and distributed under their own license. (see .\bin\*\dpinst-license.rtf)
+SET "S_Version=v13.05.07"
+SET "S_Title=DriverPacks.net Stand Alone Driver Updater 3"
 
- :: rev 12.05.20
  :: Originally written by Jeff Herre AKA OverFlow, significantly rewritten by Erik Hansen AKA Mr_Smartepants. 
- :: Modified by Brent Newland (casipc.com) to support network shares and UAC elevation
+ :: Modified by Brent Newland (casipc.com) to support network shares and UAC elevation.
+ :: Modified by SteveDun to add additional functionality and NT6 touchpad bugfixes.
  :: A Script to use Microsoft's DPInst.exe with the DriverPacks.
  :: Help and Support available at http://forum.driverpacks.net/viewtopic.php?id=5336
  :: This script assumes that the original folder structure of the downloaded archive remains intact.
  :: Please do not alter the folder structure unless you REALLY know what you are doing and alter the below code accordingly. 
  
  :: Changelog:
+ :: v130507 v3.0 (Erik Hansen)
+ :: Cleaned up user choice code, standardized variable names to X_CamelCase method.
+ :: Fixed bug where KTD option was not set when /CR switch is used.
+ :: Changed folder delete code to incorporate array processing.
+
+ :: v130501 v3.0 (Erik Hansen)
+ :: Modified code to remove designated "known problem" drivers from driver pool prior to dpinst by scanning a "Known-problems*.txt" file.
+ :: Modified code to ensure user options are enforced.
+
+ :: v130428 v3.0 (Erik Hansen)
+ :: Modified code to remove more known problem Touchpad HID drivers from driver pool prior to dpinst. (Alps/Dell, Elantech)
+
+ :: v130426 v3.0 (Erik Hansen)
+ :: Modified OS detection code to use WMIC instead of query the registry.
+ :: Fixed bug where files were "cleaned" despite user choice.
+ :: Added code to remove known problem Touchpad HID drivers from driver pool prior to dpinst. (Alps/Dell, Elantech)
+
+ :: v130423 v3.0
+ :: Remerged codebases (briefly forked during simultaneous development).
+ :: Sound effect script removed from bin folder...SAD now creates it dynamically.  (SteveDun)
+ :: SAD now calls UAC Check for NT6 OS's dynamically (replaces the Elevate commands in bin folder) (SteveDun)
+ :: Now fully works when added to windows ISO's. (SteveDun)
+ :: Corrected error's in Cleaning Phase.  (SteveDun)
+ :: Modified code to support commandline switches using either slash '/' or dash '-' (example: script.cmd -s) (Erik Hansen)
+ :: Modified extraction code to minimize extraction windows. (Erik Hansen)
+ :: Added code to count extraction progress in title bar. (Erik Hansen)
+ :: Fixed bug where commandline execution would work but double-click would fail. (Erik Hansen)
+ :: Cleaned up displayed text to center in window. (Erik Hansen)
+
+ :: v130420 v3.0 (Erik Hansen)
+ :: Fixed bug in :Elevate section where commandline switches were not passed to utility when run as a normal user.
+ :: Fixed bug where utility would try to delete itself after complete.
+ :: Minor fixes to :Cleaningphase section and :Usage verbiage.
+
+ :: v130419 v3.0 (Erik Hansen)
+ :: Fixed file copy error for *.ins file.
+ :: Added code to skip NT6 folder cleanup for NT5 systems.
+ :: Fixed Log file missing error.
+
+ :: v130418 v3.0 (Erik Hansen)
+ :: Merged codebase between Erik Hansen and SteveDun
+ :: Merged many separate functions to save compute space.
+ :: Pruned excess conditional statements to speed processing.
+ :: General-level code optimization
+ 
+ :: v130416 v3.0 Modified Final (SteveDun)
+ :: Added support for Win 8.1 Blue NT 6.3.
+ :: Updated 7-zip32.dll as per request.
+ :: reg query for InstallationType for non Server OS's could cause error on some systems is now corrected.
+ :: Updated to new version of Devcon.
+ :: Additional option to save touchpad drivers if it didnt install the correct one.  Use Device Manager to install it then.
+ :: Now KTD works with NT5 systems. 
+ :: Added more efficient cleanup routine.
+ :: Added support for XP MCE rollup 2.
+ :: Instead of exiting on some error's I change it to return to the cmd prompt.
+ :: Sound effect played in XP would cause script to crash at the end.  Fixed now.
+ :: Addded support for Win8.  
+ :: Added restore point creation (supports Win8 & Servers).  Not avail. in silent mode.  
+ :: Added user input on weather to restart or not.   
+ :: Updated DPInst.exe to newest versions (2 for NT=5(2010) and 2 for NT=6(2012)) (32 and 64 bit).
+ :: Fixed silent install failure.
+ :: Added Reboot option to silent switches.
+ :: Fixed Log file crashing script.
+ :: Added option to keep Log file or delete it. Not avail. in silent mode.  Log file is kept by default.
+ :: Corrected layout of the timer counter to show correctly.
+ :: Updated "/?" or "/H" help from command prompt. 
+ :: Minor cosmetic fixes.
+
  :: v120520
  :: Modified code to detect OS Architecture correctly. (Erik Hansen)
  :: Removed extra parenthesis and other minor refinements.
@@ -41,7 +112,7 @@ net stop "FOG Service"
  
  :: v120203
  :: Added code to use native installed 7-Zip IF present. (Erik Hansen)
- :: Fixed bug with extra space in %ARCH% variable
+ :: Fixed bug with extra space in %F_OSbit% variable
 
  :: v111118
  :: Fixed typo in log file output reference.(Twig123/Dave)
@@ -86,392 +157,522 @@ net stop "FOG Service"
  :: Changed Method 1 COPY function to XCOPY for reliability.
  :: Improved readme.txt instructions.
 
-:Default-options
-:: Change SILENT option to "Y" if you want to bypass all prompts but make sure the next two options are set to your preferences first.
-SET "SILENT=N"
-:: KTD option.  Default is "N", "Y" will not delete any drivers from the %systemdrive%\D\ folder.
-SET "KTD=N"
-:: OS folder clean option.  Default is "N", "Y" will delete any drivers for OS folders not needed.
-SET "CLEAN=N"
+TITLE %S_Title% %S_Version% & Color 9f
 
-:Help-options
-IF "%1"=="/?" goto usage
-IF /I "%1"=="/h" goto usage
-IF /I "%1"=="/S" SET "SILENT=Y"
-::if "%1"=="/K" SET "KTD=Y"
-::if "%1"=="/C" SET "CLEAN=Y"
+:Default_Options
+SET "C_SilentFlag=N" & SET "C_KTDFlag=N" & SET "C_OSFolderCleanFlag=N" & SET "C_RebootFlag=X"
+ :: KTD option.  "Y" will not delete any drivers from the %systemdrive%\D\ folder.
+ :: OS folder clean option.  "Y" will delete any drivers for OS folders not needed.
+ :: REBOOT "R" or Exit "X"
 
+:Help_Options
+IF NOT "%1"=="" (SET "params=%1") ELSE (SET "params=")
+IF [%params%]==[/?] GOTO :Usage
+FOR %%A IN (/h /help -h -help) DO IF /I [%params%]==[%%A] GOTO Usage
+FOR %%A IN (/s -s) DO IF /I [%params%]==[%%A] (SET "C_SilentFlag=Y" & SET "C_KTDFlag=N" & SET "C_OSFolderCleanFlag=Y" & SET "C_RebootFlag=X")
+FOR %%A IN (/sr -sr) DO IF /I [%params%]==[%%A] (SET "C_SilentFlag=Y" & SET "C_KTDFlag=N" & SET "C_OSFolderCleanFlag=Y" & SET "C_RebootFlag=R")
+FOR %%A IN (/k -k) DO IF /I [%params%]==[%%A] (SET "C_SilentFlag=Y" & SET "C_KTDFlag=Y" & SET "C_OSFolderCleanFlag=Y" & SET "C_RebootFlag=X")
+FOR %%A IN (/kr -kr) DO IF /I [%params%]==[%%A] (SET "C_SilentFlag=Y" & SET "C_KTDFlag=Y" & SET "C_OSFolderCleanFlag=Y" & SET "C_RebootFlag=R")
+FOR %%A IN (/c -c) DO IF /I [%params%]==[%%A] (SET "C_SilentFlag=Y" & SET "C_KTDFlag=Y" & SET "C_OSFolderCleanFlag=N" & SET "C_RebootFlag=X")
+FOR %%A IN (/cr -cr) DO IF /I [%params%]==[%%A] (SET "C_SilentFlag=Y" & SET "C_KTDFlag=Y" & SET "C_OSFolderCleanFlag=N" & SET "C_RebootFlag=R")
+
+:Path_Push
 :: Check for network paths, assign temporary drive letter IF found.
-SET pd=%~dp0
-pushd %~dp0
-SET cur=%cd%
+SET "pd=%~dp0"
+pushd %pd%
+SET "D_CurrentDirectory=%cd%"
 
-:slash
+:Slash
 :: Strip all trailing backslash from path.  \\ should become \ then nothing.
-IF [%cur:~-1%]==[\]             SET "cur=%cur:~0,-1%"
-IF [%cur:~-1%]==[\] GOTO slash
+IF [%D_CurrentDirectory:~-1%]==[\] SET "D_CurrentDirectory=%D_CurrentDirectory:~0,-1%"
+IF [%D_CurrentDirectory:~-1%]==[\] GOTO Slash
 cls
 
-TITLE DriverPacks.net Stand Alone Driver Updater v2.0 & Color 9f
+rem :: SET LOG=nul & IF [%1] NEQ [] (IF /I [%1] NEQ [Q] (SET LOG=%1) & IF /I [%1] EQU [V] (SET LOG=CON))
+SET "LOG=%SystemDrive%\%~n0.log"
 
-SET LOG=nul & IF [%1] NEQ [] (IF /I [%1] NEQ [Q] (SET LOG=%1) & IF /I [%1] EQU [V] (SET LOG=CON))
-SET msg2=%msg% %username%
-
-:OS-check
-FOR /F "tokens=2*" %%A IN ('REG QUERY "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v CurrentBuildNumber') DO SET build=%%B
-FOR /F "tokens=2*" %%A IN ('REG QUERY "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v ProductName') DO SET prodname=%%B
-FOR /F "tokens=2*" %%A IN ('REG QUERY "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v InstallationType') DO SET installtype=%%B
-FOR %%i IN (2600 3790) DO (
-IF /I "%build%"=="%%i" SET "OSbuild=NT5"
+:OS_check
+IF EXIST WMIC (
+FOR %%i IN (Caption BuildNumber ProductType) DO (
+  SET T_CMD=%%i
+  FOR /F "tokens=1* delims==" %%A IN ('WMIC OS GET !T_CMD! /FORMAT:list') DO (SET "F_%%A=%%B")>nul
   )
-FOR %%i IN (6000 6001 6002 7600 7601 7602) DO (
-IF /I "%build%"=="%%i" SET "OSbuild=NT6"
-  )
-SET "OSTYPE=WINXP"
-FOR %%i IN (6000 6001 6002) DO (
-IF /I "%build%"=="%%i" SET "OSTYPE=VISTA"
-  )
-FOR %%i IN (7600 7601 7602) DO (
-IF /I "%build%"=="%%i" SET "OSTYPE=WIN7"
-  )
-IF /I "%INSTALLTYPE%"=="Server" SET "OSTYPE=SERVER"
+  ) ELSE (
+  FOR /F "tokens=2*" %%A IN ('REG QUERY "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v CurrentBuildNumber') DO SET F_BuildNumber=%%B
+  FOR /F "tokens=2*" %%A IN ('REG QUERY "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v ProductName') DO SET F_Caption=%%B
+  FOR /F "tokens=2*" %%A IN ('REG QUERY "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v InstallationType') DO SET F_ProductType=%%B
+)
+SET "T_CMD="
+IF '%ERRORLEVEL%'=='0' CLS
+FOR %%i IN (2600 3790 2715) DO (IF /I "%F_BuildNumber%"=="%%i" SET "F_OSBuild=NT5")
+FOR %%i IN (6000 6001 6002 7600 7601 7602 9200 9369 9385) DO (IF /I "%F_BuildNumber%"=="%%i" SET "F_OSBuild=NT6")
+SET "F_OSType=WINXP"
+FOR %%i IN (6000 6001 6002) DO (IF /I "%F_BuildNumber%"=="%%i" SET "F_OSType=VISTA")
+FOR %%i IN (7600 7601 7602) DO (IF /I "%F_BuildNumber%"=="%%i" SET "F_OSType=WIN7")
+FOR %%i IN (9200 9369 9385) DO (IF /I "%F_BuildNumber%"=="%%i" SET "F_OSType=WIN8")
+FOR %%i IN (Server 2 3) DO (IF /I "%F_ProductType%"=="%%i" SET "F_OSType=SERVER")
+IF NOT DEFINED F_OSBuild GOTO Error1
 
 ECHO. & ECHO Locating the DriverPacks...
-SET "M=0"
-IF /I "%OSbuild%"=="NT6" GOTO Elevate
+SET "F_Method=0"
+IF /I "%F_OSBuild%"=="NT6" GOTO Elevate
 
-:PROCESSOR
+:Processor
 :: Detect OS bit-ness on running system.  Assumes 32-bit unless 64-bit components exist.
-SET "ARCH=32" & SET "DPLoc=%cur%\%OSbuild%\x86"
-IF EXIST "%SystemRoot%\SysWOW64" (SET "ARCH=64" & SET "DPLoc=%cur%\%OSbuild%\x64") ELSE (
-  IF DEFINED PROCESSOR_ARCHITEW6432 (SET "ARCH=64" & SET "DPLoc=%cur%\%OSbuild%\x64")
+SET "F_OSbit=32" & SET "D_DPSLocation=%D_CurrentDirectory%\%F_OSBuild%\x86" & SET "F_CPUarch=X86"
+IF /I EXIST "%SystemRoot%\SysWOW64\cmd.exe" (SET "F_OSbit=64" & SET "F_CPUarch=X64" & SET "D_DPSLocation=%D_CurrentDirectory%\%F_OSBuild%\x64") ELSE (
+  IF DEFINED PROCESSOR_ARCHITEW6432 (SET "F_OSbit=64" & SET "F_CPUarch=X64" & SET "D_DPSLocation=%D_CurrentDirectory%\%F_OSBuild%\x64")
 )
 
 :ZipCheck
-SET "zip=N"
-IF EXIST "%programfiles%\7-Zip\7z.exe" (SET "zpath=%programfiles%\7-Zip\7z.exe" & SET "zip=Y" & GOTO ZipFound)
-IF EXIST "%cur%\bin\%ARCH%\7z.exe" (SET "zpath=%cur%\bin\%ARCH%\7z.exe" & SET "zip=Y" & GOTO ZipFound)
+SET "F_7Zip=N"
+IF /I EXIST "%programfiles%\7-Zip\7z.exe" (SET "O_7ZipExe=%programfiles%\7-Zip\7z.exe" & SET "F_7Zip=Y" & GOTO ZipFound)
+IF /I EXIST "%D_CurrentDirectory%\bin\%F_OSbit%\7z.exe" (SET "O_7ZipExe=%D_CurrentDirectory%\bin\%F_OSbit%\7z.exe" & SET "F_7Zip=Y" & GOTO ZipFound)
 
 :ZipFound
-IF not EXIST "%zpath%" SET "zip=N"
+IF /I NOT EXIST "%O_7ZipExe%" SET "F_7Zip=N"
 
-:DoubleCheck
-IF /I "%OSbuild%"=="NT5" GOTO Method5
-IF /I "%OSbuild%"=="NT6" GOTO Method6
-GOTO Error1
-
-:Method5
-::Double check for XP-64.  Delete the below line to force usage for XP-64 (NOT supported, you're on your own!).
-IF /I "%ARCH%"=="64" GOTO Error1
-IF EXIST "%cur%\D\"             (SET "DPLoc=%cur%" & SET "M=1" & GOTO Message2)
-IF EXIST "%DPLoc%\D\"           (SET "M=1" & GOTO Message2)
-IF EXIST "%DPLoc%\DP_*.7z"      (SET "M=2" & GOTO Found)
-IF EXIST "%cur%\DP_*.7z"        (SET "DPLoc=%cur%" & SET "M=2" & GOTO Found)
+:Method_Check
+:: Double check for XP-64.  Delete the below line to force usage for XP-64 (NOT supported, you're on your own!).
+IF /I "%F_OSBuild%"=="NT5" (IF /I "%F_OSbit%"=="64" GOTO Error1)
+:: Determine DriverPack method.
+IF /I EXIST "%D_CurrentDirectory%\DP*.7z" (SET "D_DPSLocation=%D_CurrentDirectory%" & SET "F_Method=2" & GOTO Found)
+IF /I EXIST "%D_CurrentDirectory%\D\" (SET "D_DPSLocation=%D_CurrentDirectory%" & SET "F_Method=1" & GOTO Message2)
+IF /I EXIST "%D_DPSLocation%\D\" (SET "F_Method=1" & GOTO Message2)
+IF /I EXIST "%D_DPSLocation%\DP_*.7z" (SET "F_Method=2" & GOTO Found)
+FOR %%i IN (3 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z) DO (IF /I EXIST "%D_DPSLocation%\%%i\" (SET "F_Method=1" & GOTO Message2))
 ECHO Searching Root folders since DriverPacks were not found in current folder...
 FOR %%i IN (C D E F G H I J K L M N O P Q R S T U V W X Y) DO (
- IF EXIST "%%i:\OEM\bin\un7zip.exe" SET "M=2"
- IF EXIST "%%i:\$OEM$\$1\D\"   (SET "DPLoc=%%i:\$OEM$\$1" & SET "M=1" & %%i)
- IF "%M%">="1" GOTO Message2
+ IF /I EXIST "%%i:\OEM\bin\un7zip.exe" (SET "F_Method=2")
+ IF /I EXIST "%%i:\$OEM$\$1\D\" (SET "D_DPSLocation=%%i:\$OEM$\$1" & SET "F_Method=1" & %%i)
+ IF "%F_Method%" GEQ "1" GOTO Message2
  )
-ECHO. & ECHO Strange... The DriverPacks were not found in %DPLoc% & ECHO. & Pause & GOTO Done
-
-:Method6
-IF "%ARCH%"=="32" SET "ARCHP=X86" 
-IF "%ARCH%"=="64" SET "ARCHP=X64" 
-FOR %%i IN (3 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z) DO (
-  IF EXIST "%DPLoc%\%%i\"    SET "M=1" & GOTO Message2
-  )
-IF EXIST "%DPLoc%\DP_*.7z" (SET "M=2" & GOTO Found)
-ECHO. & ECHO Strange... The DriverPacks were not found in %DPLoc% & ECHO. & Pause & GOTO Done
+ECHO. & ECHO Strange... The DriverPacks were not found in %D_DPSLocation% & ECHO. & ECHO Press any key to exit... & PAUSE > nul & GOTO BYE
 
 :Found
-IF /I "%zip%"=="Y" GOTO Message2
-IF not EXIST "%cur%\bin\un7zip.exe" GOTO Error2
+FOR /F "delims=" %%d IN ('DIR /B /S "%D_DPSLocation%\DP*.7z"') DO (
+  IF NOT DEFINED dpsCount (SET /a dpsCount=1) ELSE (SET /a dpsCount+=1)
+  SET F_dpsCount=!dpsCount!
+  )
+SET "dpsCount="
+IF /I "%F_7Zip%"=="Y" GOTO Message2
+IF /I NOT EXIST "%D_CurrentDirectory%\bin\un7zip.exe" GOTO Error2
 
 :Message2
-IF /I "%SILENT%"=="Y" GOTO Lets-GO
-::Reset variables to defaults
-SET "KTD=N"
-SET "CLEAN=N"
+SET "C_KeepHID="
+IF /I "%C_SilentFlag%"=="Y" GOTO Lets_GO
 
 cls
 SETlocal
-ECHO      ********************************************************************
+ECHO      **************************** %S_Version% ****************************
 ECHO         Released under Creative Commons Attribution-ShareAlike license
-ECHO                   %msg2% please read below carefully.     
+ECHO                   %username% please read below carefully.     
 ECHO.
 ECHO                  Operating System Architecture Detected:
-ECHO           %prodname% %ARCH%-bit on %PROCESSOR_ARCHITECTURE% compatible CPU
+ECHO           %F_Caption% %F_OSbit%-bit on %PROCESSOR_ARCHITECTURE% compatible CPU
 ECHO            CPU: %PROCESSOR_IDENTIFIER%             
 ECHO.
-ECHO                 %ARCH%-bit DriverPacks will be installed from 
-ECHO               %DPLoc% using method: %M%
-ECHO                Native 7-zip command line application found? %zip%
+ECHO                 %F_OSbit%-bit DriverPacks will be installed from 
+ECHO                 %D_DPSLocation% using method: %F_Method%
+ECHO                Native 7-zip command line application found? %F_7Zip%
 ECHO.
-ECHO               IF this is NOT intended, exit the program now!
-ECHO      ********************************************************************
+ECHO      *********************************************************************
 ECHO            Do you want to Keep The Drivers (KTD) after install?
 ECHO        Answer Y/N  (Y- will keep all drivers unless deleted manually)
-ECHO      ********************************************************************
+ECHO      *********************************************************************
 
-:KTD-option
-SET option=n
-IF /I "%option%"=="Y" SET "KTD=Y"
-IF /I "%KTD%"=="Y" ECHO KTD option has been enabled. 
+:KTD_option
+SET /p C_KTDFlag=[Y,N]?
+IF /I NOT "%C_KTDFlag%"=="Y" (SET "C_KTDFlag=N")
 
-:Message3
-IF /I "%OSbuild%"=="NT5" GOTO Lets-GO
 ECHO.
-ECHO      ********************************************************************
-ECHO            Do you want to remove drivers not needed by this OS?
+ECHO.
+ECHO      *********************************************************************
+ECHO                    Do you wish to create a restore point?
+ECHO                                 Answer Y/N          
+ECHO      *********************************************************************
+SET /p C_CreateRestorePoint=[Y,N]?
+IF /I NOT "%C_CreateRestorePoint%"=="Y" (SET "C_CreateRestorePoint=N" & GOTO :Clean_Option)
+
+:Create_Restore_Point
+IF /I EXIST "%D_CurrentDirectory%\bin\crp.vbs" (start /w %windir%\System32\wscript.exe "%D_CurrentDirectory%\bin\crp.vbs")
+ECHO.
+ECHO Restore point created successfuly.
+ECHO.
+
+:Clean_Option
+IF /I "%F_OSBuild%"=="NT5" GOTO Lets_GO
+ECHO.
+ECHO      *********************************************************************
+ECHO             Do you want to remove drivers not needed by this OS?
 ECHO            Answer Y/N  (N- will use all drivers from every folder)
-ECHO      ********************************************************************
+ECHO      *********************************************************************
+SET /p C_OSFolderCleanFlag=[Y,N]?
+IF /I NOT "%C_OSFolderCleanFlag%"=="Y" (SET "C_OSFolderCleanFlag=N")
 
-:CLEAN-option
-SET option=y
-IF /I "%option%"=="Y" SET "CLEAN=Y"
-IF /I "%CLEAN%"=="Y" ECHO Unnecessary drivers will be deleted prior to integration. 
-
-:Lets-GO
-SET DPFL=%SystemDrive%\DPsFnshr.ini
-IF NOT EXIST "%SystemDrive%\D\" MD "%SystemDrive%\D\"
-
-:dpinst
-IF /I "%zip%"=="Y" GOTO dpinstNative
-ECHO. & ECHO Extracting the DriverPacks %ARCH%-bit core files.
-Start /wait /separate /high "" "%cur%\bin\un7zip.exe" "%cur%\bin\%ARCH%\dpinst.7z" %SystemDrive%\D\
-GOTO Method1
-
-:dpinstNative
-ECHO. & ECHO Extracting the DriverPacks %ARCH%-bit core files using native 7-Zip.
-Start /wait /separate /high "" "%zpath%" x "%cur%\bin\%ARCH%\dpinst.7z" -o"%SystemDrive%\D\"
+:Lets_GO
+ECHO.
+IF /I "%C_KTDFlag%"=="Y" ECHO KTD option has been enabled.
+IF /I "%C_OSFolderCleanFlag%"=="Y" ECHO Unnecessary drivers will be deleted prior to integration.
+SET O_DPSFinisherINI=%SystemDrive%\DPsFnshr.ini
+IF /I NOT EXIST "%SystemDrive%\D\" MD "%SystemDrive%\D\"
+ECHO. & ECHO Extracting the DriverPacks %F_OSbit%-bit core files.
+IF /I "%F_7Zip%"=="Y" (
+  Start /wait /separate /high /min "" "%O_7ZipExe%" x "%D_CurrentDirectory%\bin\%F_OSbit%\dpinst-%F_OSBuild%.7z" -o"%SystemDrive%\D\"
+  ) ELSE (
+  Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" "%D_CurrentDirectory%\bin\%F_OSbit%\dpinst-%F_OSBuild%.7z" %SystemDrive%\D\
+)
 
 :Method1
-IF "%M%"=="1" (
+IF "%F_Method%"=="1" (
   ECHO. & ECHO Preparing the DriverPacks files. Method 1 was found. & ECHO.
-  IF NOT "%DPLoc%"=="%SystemDrive%" ECHO Copying Driverpacks files & XCOPY "%DPLoc%\." "%SystemDrive%\D\." /E /H
-  ECHO [Settings]			 	>  %DPFL%
-  ECHO DPsRoot     = "%DPLoc%"			>> %DPFL%
-  ECHO DPsRootDel  = "false"			>> %DPFL%
-  ECHO debug       = "true"			>> %DPFL%
-  CD %DPLoc%\D
-              )
+  IF NOT "%D_DPSLocation%"=="%SystemDrive%" (ECHO Copying Driverpacks files & XCOPY "%D_DPSLocation%\." "%SystemDrive%\D\." /E /H)
+  ECHO>"%O_DPSFinisherINI%" [Settings]
+  ECHO>>"%O_DPSFinisherINI%" DPsRoot = "%D_DPSLocation%"
+  ECHO>>"%O_DPSFinisherINI%" DPsRootDel = "false"
+  ECHO>>"%O_DPSFinisherINI%" debug = "true"
+  CD %D_DPSLocation%\D
+)
 
 :Method2
-IF /I "%zip%"=="Y" GOTO Method2Native
-IF "%M%"=="2" (
+IF "%F_Method%"=="2" (
   ECHO. & ECHO Preparing the DriverPacks now. Method 2 was found. & ECHO.
-  ECHO Extracting DriverPacks from: %DPLoc%
-  FOR %%f IN ("%DPLoc%\DP_*.7z") DO Start /wait /separate /high "" "%cur%\bin\un7zip.exe" "%%f" %SystemDrive%\D\
-  IF /I "%OSbuild%"=="NT6" GOTO Begin
-  COPY /Y "%DPLoc%\*.ins" 			%SystemDrive%\
-  Start /wait /separate /high "" "%cur%\bin\un7zip.exe" "%cur%\bin\DPsFnshr.7z" %SystemDrive%\
+  ECHO Extracting %F_dpsCount% DriverPacks from: %D_DPSLocation%
+  SET "T_Title=Extracting DriverPack"
+  SET "F_TempDPScount=1"
+  IF /I "%F_7Zip%"=="Y" (
+    ECHO Using native 7-Zip
+    FOR %%f IN ("%D_DPSLocation%\DP_*.7z") DO (
+      @TITLE -Working- !T_Title! !F_TempDPScount! of %F_dpsCount%
+      ECHO Extracting DriverPack !F_TempDPScount! of %F_dpsCount%
+      IF /I "%F_OSBuild%"=="NT5" (Start /wait /separate /high /min "" "%O_7ZipExe%" x "%%f" -o"%SystemDrive%\")
+      IF /I "%F_OSBuild%"=="NT6" (Start /wait /separate /high /min "" "%O_7ZipExe%" x "%%f" -o"%SystemDrive%\D\")
+      SET /a "F_TempDPScount=!F_TempDPScount!+1"
+      )
+    ) ELSE (
+    FOR %%f IN ("%D_DPSLocation%\DP_*.7z") DO (
+      @TITLE -Working- !T_Title! !F_TempDPScount! of %F_dpsCount%
+      ECHO Extracting DriverPack !F_TempDPScount! of %F_dpsCount%
+      IF /I "%F_OSBuild%"=="NT5" (Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" "%%f" %SystemDrive%\)
+      IF /I "%F_OSBuild%"=="NT6" (Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" "%%f" %SystemDrive%\D\)
+      SET /a "F_TempDPScount=!F_TempDPScount!+1"
+      )
+    )
+  TITLE %S_Title%
+  SET "F_TempDPScount="
+  IF /I "%F_OSBuild%"=="NT6" GOTO Begin
+  IF /I EXIST "%D_DPSLocation%\*.ins" (COPY /Y "%D_DPSLocation%\*.ins" %SystemDrive%\)
+  IF /I "%F_7Zip%"=="Y" (
+    Start /wait /separate /high /min "" "%O_7ZipExe%" x "%D_CurrentDirectory%\bin\DPsFnshr.7z" -o"%SystemDrive%\"
+    ) ELSE (
+    Start /wait /separate /high /min "" "%D_CurrentDirectory%\bin\un7zip.exe" "%D_CurrentDirectory%\bin\DPsFnshr.7z" %SystemDrive%\
+    )
   %SystemDrive% & cd %SystemDrive%\D
-  ECHO [Settings]			 	>  %DPFL%
-  ECHO DPsRoot     = "%SystemDrive%"		>> %DPFL%
-  ECHO DPsRootDel  = "true"			>> %DPFL%
-  ECHO debug       = "true"			>> %DPFL%
-              )
-GOTO SKIPKTD
+  ECHO>"%O_DPSFinisherINI%" [Settings]
+  ECHO>>"%O_DPSFinisherINI%" DPsRoot = "%SystemDrive%"
+  ECHO>>"%O_DPSFinisherINI%" DPsRootDel = "true"
+  ECHO>>"%O_DPSFinisherINI%" debug = "true"
+)
 
-:Method2Native
-IF "%M%"=="2" (
-  ECHO. & ECHO Preparing the DriverPacks now. Method 2 was found. & ECHO Using native 7-Zip
-  ECHO Extracting DriverPacks from: %DPLoc%
-  FOR %%f IN ("%DPLoc%\DP_*.7z") DO Start /wait /separate /high "" "%zpath%" x "%%f" -o"%SystemDrive%\D\"
-  IF /I "%OSbuild%"=="NT6" GOTO Begin
-  COPY /Y "%DPLoc%\*.ins" 			%SystemDrive%\
-  Start /wait /separate /high "" "%zpath%" x "%cur%\bin\DPsFnshr.7z" -o"%SystemDrive%\"
-  %SystemDrive% & cd %SystemDrive%\D
-  ECHO [Settings]			 	>  %DPFL%
-  ECHO DPsRoot     = "%SystemDrive%"		>> %DPFL%
-  ECHO DPsRootDel  = "true"			>> %DPFL%
-  ECHO debug       = "true"			>> %DPFL%
-              )
-
-:SKIPKTD
-IF /I "%KTD%"=="Y" GOTO KEEPKTD
-ECHO KTD         = "false"			>> %DPFL%
-ECHO KTDlocation = "%SystemRoot%\DriverPacks"	>> %DPFL%
-ECHO logLocation = "%SystemRoot%"		>> %DPFL%
-GOTO Begin
-
-:KEEPKTD
-ECHO KTD         = "paths:D"			>> %DPFL%
-ECHO KTDlocation = "%SystemRoot%\DriverPacks"	>> %DPFL%
-ECHO logLocation = "%SystemRoot%"		>> %DPFL%
+:Skip_KTD
+IF /I "%C_KTDFlag%"=="Y" (ECHO>>"%O_DPSFinisherINI%" KTD = "paths:D") ELSE (ECHO>>"%O_DPSFinisherINI%" KTD = "false")
+ECHO>>"%O_DPSFinisherINI%" KTDlocation = "%SystemRoot%\DriverPacks"
+ECHO>>"%O_DPSFinisherINI%" logLocation = "%SystemRoot%"
 
 :Begin
-IF /I "%CLEAN%"=="N" GOTO Begin2
+IF /I NOT EXIST "%SystemDrive%\Touchpad HID\" MD "%SystemDrive%\Touchpad HID\"
+IF /I "%F_OSBuild%"=="NT6" (
+  FOR %%f IN ("%D_DPSLocation%\DP_Touchpad*.7z") DO Start /wait /separate /high /min "" "%O_7ZipExe%" x "%%f" -o"%SystemDrive%\Touchpad HID\"
+  ) ELSE (
+  FOR %%f IN ("%D_DPSLocation%\DP_HID*.7z") DO Start /wait /separate /high /min "" "%O_7ZipExe%" x "%%f" -o"%SystemDrive%\Touchpad HID\"
+)
+:: Remove known problem Touchpad HID drivers from driver pool
+FOR %%i IN ("%SystemDrive%\D\Known-problems*.txt") DO (FOR /F "eol=; tokens=* delims=" %%D IN (%%i) DO (IF /I EXIST "%SYSTEMDRIVE%\D\%%D" RENAME "%SYSTEMDRIVE%\D\%%D" "%%~nxD.bak"))
 
-:CLEAN-warn
-ECHO OSTYPE is %OSTYPE%
-IF /I "%OSTYPE%"=="SERVER" (
-  ECHO drivers will be deleted from "%SystemDrive%\D\%ARCHP%\Vista\" 
-  ECHO drivers will be deleted from "%SystemDrive%\D\%ARCHP%\Win7\" )
-IF /I "%OSTYPE%"=="VISTA" (
-  ECHO drivers will be deleted from "%SystemDrive%\D\%ARCHP%\Server\" 
-  ECHO drivers will be deleted from "%SystemDrive%\D\%ARCHP%\Win7\" )
-IF /I "%OSTYPE%"=="WIN7" (
-  ECHO drivers will be deleted from "%SystemDrive%\D\%ARCHP%\Server\" 
-  ECHO drivers will be deleted from "%SystemDrive%\D\%ARCHP%\Vista\" )
-IF /I "%SILENT%"=="Y" GOTO CLEAN-folder
-ECHO This is your final warning before drivers are deleted from unneeded OS folders.
+:Clean_Warn
+IF /I "%C_OSFolderCleanFlag%"=="N" GOTO Begin2
+IF /I "%F_OSBuild%"=="NT5" GOTO Begin2
+ECHO. & ECHO OS Type is %F_OSType% & ECHO.
+IF /I "%F_OSType%"=="SERVER" (FOR %%i IN (Vista Win7 Win8) DO (ECHO Drivers will be deleted from "%SystemDrive%\D\%F_CPUarch%\%%i"))
+IF /I "%F_OSType%"=="VISTA" (FOR %%i IN (Server Win7 Win8) DO (ECHO Drivers will be deleted from "%SystemDrive%\D\%F_CPUarch%\%%i"))
+IF /I "%F_OSType%"=="WIN7" (FOR %%i IN (Server Vista Win8) DO (ECHO Drivers will be deleted from "%SystemDrive%\D\%F_CPUarch%\%%i"))
+IF /I "%F_OSType%"=="WIN8" (FOR %%i IN (Server Vista) DO (ECHO Drivers will be deleted from "%SystemDrive%\D\%F_CPUarch%\%%i"))
+IF /I "%C_SilentFlag%"=="Y" GOTO Clean_Folder
+ECHO.
+ECHO This is your final warning before uneeded drivers are deleted!
+PAUSE
 
+:Clean_Folder
+IF /I "%C_OSFolderCleanFlag%"=="N" GOTO Begin2
+IF /I "%F_OSType%"=="SERVER" (FOR %%i IN (Vista Win7 Win8) DO (IF /I EXIST "%SystemDrive%\D\%F_CPUarch%\%%i" RD /S /Q "%SystemDrive%\D\%F_CPUarch%\%%i\"))
+IF /I "%F_OSType%"=="VISTA" (FOR %%i IN (Server Win7 Win8) DO (IF /I EXIST "%SystemDrive%\D\%F_CPUarch%\%%i" RD /S /Q "%SystemDrive%\D\%F_CPUarch%\%%i\"))
+IF /I "%F_OSType%"=="WIN7" (FOR %%i IN (Vista Server Win8) DO (IF /I EXIST "%SystemDrive%\D\%F_CPUarch%\%%i" RD /S /Q "%SystemDrive%\D\%F_CPUarch%\%%i\"))
+IF /I "%F_OSType%"=="WIN8" (FOR %%i IN (Vista Server) DO (IF /I EXIST "%SystemDrive%\D\%F_CPUarch%\%%i" RD /S /Q "%SystemDrive%\D\%F_CPUarch%\%%i\"))
 
-:CLEAN-folder
-IF /I "%OSTYPE%"=="SERVER" (
-  RD /S /Q "%SystemDrive%\D\%ARCHP%\Vista\" 
-  RD /S /Q "%SystemDrive%\D\%ARCHP%\Win7\" )
-IF /I "%OSTYPE%"=="VISTA" (
-  RD /S /Q "%SystemDrive%\D\%ARCHP%\Server\" 
-  RD /S /Q "%SystemDrive%\D\%ARCHP%\Win7\" )
-IF /I "%OSTYPE%"=="WIN7" (
-  RD /S /Q "%SystemDrive%\D\%ARCHP%\Server\" 
-  RD /S /Q "%SystemDrive%\D\%ARCHP%\Vista\" )
+ECHO.
 ECHO Excess drivers deleted!  
-IF /I "%SILENT%"=="Y" GOTO Begin2
-
+IF /I "%C_SilentFlag%"=="Y" GOTO Begin2
+PAUSE
 
 :Begin2
 %SystemDrive% & cd %SystemDrive%\D
 cls
 ECHO      *********************************************************************
 ECHO.
-ECHO. & ECHO.
 ECHO                 Running the MicroSoft Driver Installer now !
 ECHO.
-ECHO        The progress window is minimized to the task bar & ECHO. & ECHO.
-ECHO. & ECHO.
-ECHO          Please wait for the MicroSoft tool to complete its job...
+ECHO              The progress window is minimized to the task bar. & ECHO. & ECHO.
+ECHO.
+ECHO           Please wait for the MicroSoft tool to complete its job...
 ECHO       This may take from 2-30 minutes depending on the speed of this PC.
 ECHO.
 ECHO      *********************************************************************
 Start "MicroSoft Driver Installer Tool Running" /wait /separate /realtime /min CMD /C DPInst.exe /c /s
-IF "%OSbuild%"=="NT6" GOTO LOG-file
+IF "%F_OSBuild%"=="NT6" GOTO Log_File
 
 :Finisher
-ECHO. & ECHO Running the DriverPacks.net Finisher now! & ECHO.
+ECHO. & ECHO Running the DriverPacks Finisher now! & ECHO.
 %SystemDrive% & cd\ & Start /wait /separate /high "" DPsFnshr.exe
 
-:LOG-file
- :: Log and Attended output section
+:Log_File
+:: Log and Attended output section
+ECHO>>"%LOG%" %S_Version% Log and Attended output section & ECHO>>"%LOG%" *
 IF /I [%1] NEQ [Q] (
+  IF [LOG] NEQ [nul] (
+  ECHO>>"%LOG%" *
+  ECHO>>"%LOG%" Method %F_Method% was found at:
+  ECHO>>"%LOG%" %D_DPSLocation%
+  ECHO>>"%LOG%" List INF's that were matched with this system
+  FOR /F "usebackq tokens=2,3,*" %%G IN (`type %windir%\dpinst.log`) DO (
+   IF /I "%%G"=="Successfull" (IF /I "%%H"=="installation" ECHO>>"%LOG%" %%G %%H %%I)
+   )
+))
 
- IF [LOG] NEQ [nul] (
-  ECHO. & ECHO Method %M% was found at: >>%LOG%
-  ECHO %DPLoc% >>%LOG%
-  ECHO List INF's that were matched with this system  >>%LOG%
-  FOR /F "usebackq tokens=2,3*" %%G IN ('type %windir%\dpinst.log') DO (
-   IF [%%G]==[Successfull] IF [%%H]==[installation] ECHO %%G %%H %%I >>%LOG%)
- )
-
-:Final-Message
+:Final_Message
 cls
-ECHO      *********************************************************************
+ECHO      ********************************************************************* & ECHO.
+ECHO        The DriverPacks Stand Alone Driver installation is complete! & ECHO.
+ECHO             The dpinst log file can be found in %windir%\DPINST.log
+ECHO             The main log file can be found in %LOG%
 ECHO.
- ECHO.  & ECHO The DriverPacks Stand Alone Drivers installation is complete!
- ECHO.  & ECHO The log file of this utility's progress is found in %windir%\dpinst.log
- ::ECHO  & Start /min sndrec32 /play /close %windir%\media\ding.wav
-   IF /I "%OSbuild%"=="NT5" GOTO Timer
-   IF /I "%KTD%"=="Y" GOTO Timer
- ECHO Now cleaning up...
- cd %SYSTEMDRIVE%
- cd \
- IF EXIST "%SYSTEMDRIVE%\D\x86\*" DEL /F /S /Q "%SYSTEMDRIVE%\D\x86\*" >nul
- IF EXIST "%SYSTEMDRIVE%\D\x64\*" DEL /F /S /Q "%SYSTEMDRIVE%\D\x64\*" >nul
- IF EXIST "%SYSTEMDRIVE%\D\*" DEL /F /S /Q "%SYSTEMDRIVE%\D\*" >nul
- IF EXIST "%SYSTEMDRIVE%\DPInst.*" DEL /F /S /Q "%SYSTEMDRIVE%\DPInst.*" >nul
- IF EXIST "%SYSTEMDRIVE%\D" RD /S /Q "%SYSTEMDRIVE%\D\" >nul
+IF /I "%C_KTDFlag%"=="Y" (
+IF /I "%F_OSBuild%"=="NT6" (
+  ECHO                  Drivers can be found for NT6 in %SystemDrive%\D\
+  ) ELSE (
+  ECHO           Drivers can be found for NT5 in %systemroot%\Driverpacks
+)
+ECHO. & ECHO.
+)
+
+:Cleaning_Phase
+FOR %%i IN ("%SystemDrive%\D\known-problems*.txt") DO (FOR /F "eol=; tokens=* delims=" %%D IN (%%i) DO (IF /I EXIST "%SYSTEMDRIVE%\D\%%D.bak" RENAME "%SYSTEMDRIVE%\D\%%D.bak" "%%~nxD"))
+ECHO  Please check Device Manager to see if Touchpad driver installed correctly.
+IF /I "%C_KTDFlag%"=="Y" (
+  ECHO            If not, then use Device Manager to install manually.
+  SET "C_KeepHID=Y"
+  GOTO HID_Clean
+  ) ELSE (
+  SET "C_KeepHID=N"
+  )
+IF /I "%C_SilentFlag%"=="Y" (
+  GOTO Cleaning2
+  )
+ECHO.
+ECHO    If Touchpad Driver didn't install correctly, do you wish to keep the 
+ECHO           Touchpad HID Drivers to reinstall using Device Manager? 
+ECHO. 
+ECHO                ( "Y" to Keep or "N" to delete directory )
+ECHO.
+SET /p C_KeepHID=[Y,N]?
+IF /I "%C_KeepHID%"=="Y" (GOTO Cleaning2) ELSE (SET "C_KeepHID=N")
+
+:HID_Clean
+IF /I NOT "%C_KeepHID%"=="Y" (
+  IF /I EXIST "%SYSTEMDRIVE%\Touchpad HID\" RD /S /Q "%SYSTEMDRIVE%\Touchpad HID\" >nul
+  IF /I EXIST "%SYSTEMDRIVE%\Touchpad\" RD /S /Q "%SYSTEMDRIVE%\Touchpad\" >nul
+)
+
+:Cleaning2
+IF /I EXIST "%SYSTEMDRIVE%\DPsFnshr.exe" (
+  DEL /F /S /Q "%SYSTEMDRIVE%\DPsFnshr.exe"
+  REG DELETE "HKLM\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "DriverPacks Finisher final cleanup" /f
+) >nul
+IF /I "%C_KeepHID%"=="Y" (ECHO. & ECHO              Touchpad HID Drivers can be found in %SYSTEMDRIVE%\Touchpad HID\)
+IF /I "%C_KTDFlag%"=="Y" GOTO Timer
+ECHO.
+ECHO Cleanup phase...
+ECHO.
+cd %SYSTEMDRIVE%
+cd \
+IF /I EXIST "%SYSTEMDRIVE%\D\x86\*" DEL /F /S /Q "%SYSTEMDRIVE%\D\x86\*" >nul
+IF /I EXIST "%SYSTEMDRIVE%\D\x64\*" DEL /F /S /Q "%SYSTEMDRIVE%\D\x64\*" >nul
+IF /I EXIST "%SYSTEMDRIVE%\D" (IF /I NOT EXIST "%SYSTEMDRIVE%\D\SAD3" RD /S /Q "%SYSTEMDRIVE%\D\") >nul
+IF /I "%C_KeepHID%"=="Y" (GOTO Timer)
+IF /I EXIST "%SYSTEMDRIVE%\Touchpad HID\*" DEL /F /S /Q "%SYSTEMDRIVE%\Touchpad HID\*" >nul
+IF /I EXIST "%SYSTEMDRIVE%\Touchpad HID\" RD /S /Q "%SYSTEMDRIVE%\Touchpad HID\" >nul
+
 :Timer
- ECHO.  & ECHO This window will close itself in 30 seconds... & ECHO. 
- For /l %%A in (1,1,30) do (<nul (SET/p z=#) & >nul ping 127.0.0.1 -n 2 )  
+ IF /I "%C_SilentFlag%"=="Y" GOTO Continue
+ ECHO. & ECHO           Do you wish to keep the Log files or delete them?
+ ECHO         Answer Y/N ( "Y" keeps Log files or "N" to delete them )
+ SET /p C_KeepLog=[Y,N]?
+ IF /I "%C_KeepLog%"=="Y" (GOTO Continue)
+ ECHO.
+ ECHO Searching for and deleting Log files.  Please stand by...
+ ECHO.
+ IF /I EXIST "%WINDIR%\DPsFnshr.*" (
+ DEL /F /S /Q "%WINDIR%\DPsFnshr.*"
+ ) >nul
+ IF /I EXIST "%WINDIR%\DPINST.*" (
+ DEL /F /S /Q "%WINDIR%\DPINST.*"
+ ) >nul
+ IF /I EXIST "%WINDIR%\DtcInstall.*" (
+ DEL /F /S /Q "%WINDIR%\DtcInstall.*"
+ ) >nul
+ IF /I EXIST "%WINDIR%\0.*" (
+ DEL /F /S /Q "%WINDIR%\0.*" 
+ ) >nul 
+ IF /I EXIST "%SYSTEMDRIVE%\%~n0.log" (
+ DEL /F /S /Q "%SYSTEMDRIVE%\%~n0.log"
+ ) >nul
+ ECHO.
+
+:Continue
+IF /I "%C_SilentFlag%"=="Y" GOTO Done
+ECHO                    This window will close in 10 seconds... & ECHO.
+FOR /l %%A in (1,1,10) do (<nul (SET/p z=#) & >nul ping 127.0.0.1 -n 2 )
+ECHO # & ECHO Done!   
+ECHO. 
 ECHO      *********************************************************************
+SET "O_TADA=%temp%\tada.vbs"
+IF /I NOT EXIST "%O_TADA%" (
+  ECHO>"%O_TADA%" Set oVoice = CreateObject^("SAPI.SpVoice"^)
+  ECHO>>"%O_TADA%" Set oSpFileStream = CreateObject^("SAPI.SpFileStream"^)
+  ECHO>>"%O_TADA%" On Error Resume Next
+  ECHO>>"%O_TADA%" oSpFileStream.Open "%windir%\Media\tada.wav"
+  ECHO>>"%O_TADA%" oVoice.SpeakStream oSpFileStream
+  ECHO>>"%O_TADA%" oSpFileStream.Close
+  START /W %windir%\System32\wscript.exe "%O_TADA%"
+  DEL /F /Q "%O_TADA%"
+) >nul
 
 :Done
+IF /I "%C_RebootFlag%"=="R" GOTO SD
+IF /I "%C_RebootFlag%"=="X" GOTO BYE
+ECHO.
+ECHO.
+ECHO.
+ECHO      *********************************************************************
+ECHO      Your system must be restarted in order to finish driver installation!
+ECHO.
+ECHO                    Do you wish to restart now or just exit?
+ECHO                    ( Press "R" to restart or "X" to exit. )
+ECHO      *********************************************************************
+ECHO.
+SET /p C_RebootFlag=[R,X]?
+IF /I "%C_RebootFlag%"=="R" (GOTO SD)
+
+:BYE
 popd
 endlocal
-cscript //B "%windir%\system32\slmgr.vbs" /ato
-%windir%\Resources\Themes\aero.theme
-shutdown -r -c "Drivers installed. Restarting."
-START C:\Drivers\RemoveD.cmd
 EXIT
-del %0
+REM DEL /F /Q %0% >nul
 
+:SD
+SHUTDOWN /r /t 10
+popd
+endlocal
+EXIT
+REM DEL /F /Q %0% >nul
+
+:Functions_and_Errors
 :Error1
-cls
-ECHO      ********************************************************************
-ECHO.
-ECHO                             %msg2%      
-ECHO.
-ECHO                  Invalid Operating System Detected:
-ECHO.
-ECHO                       %prodname%
-ECHO                    Which uses %OSbuild% DriverPacks
-ECHO                    Not currently supported
-ECHO.
-ECHO                     Please exit the program now!
-ECHO.
-ECHO      ********************************************************************
-pause
-exit
+CALL :Error_Start
+ECHO *                      %F_Caption%
+ECHO *                   Which uses %F_OSBuild% DriverPacks
+ECHO *                   Not currently supported
+CALL :Error_Stop
+GOTO EOF
 
 :Error2
-cls
-ECHO      ********************************************************************
-ECHO.
-ECHO.
-ECHO                             %msg2%      
-ECHO.
-ECHO.
-ECHO                        un7zip.exe is missing.
-ECHO.
-ECHO.
-ECHO                     Please exit the program now!
-ECHO.
-ECHO.
-ECHO      ********************************************************************
-pause
-exit
+CALL :Error_Start
+ECHO *                       un7zip.exe is missing.
+CALL :Error_Stop
+GOTO EOF
 
 :Error3
-cls
-ECHO      ********************************************************************
+CALL :Error_Start
+ECHO                   Invalid Operating System Detected:
 ECHO.
-ECHO                             %msg2%      
-ECHO.
-ECHO                  Invalid Operating System Detected:
-ECHO.
-ECHO                        %prodname% %ARCH%-bit OS
-ECHO                    Installed on %PROCESSOR_ARCHITECTURE% processor
-ECHO                    Not currently supported
-ECHO.
-ECHO                     Please exit the program now!
-ECHO.
-ECHO      ********************************************************************
-pause
-exit
+ECHO                         %F_Caption% %F_OSbit%-bit OS
+ECHO                     Installed on %PROCESSOR_ARCHITECTURE% processor
+ECHO                     Not currently supported
+CALL :Error_Stop
+GOTO EOF
 
-:usage
-echo %0 is an batch program to automate the 
-echo installation of drivers on any Windows system.
-echo Usage is %0 {/?!/h!/H} (only one switch used at a time)
-echo /? or /h or /H will bring up this guide.
-echo /S will enable "Silent" mode which will not prompt for options but will
-echo execute the batch with whatever options are set as default.
+:Error_Start
+cls
+ECHO      *********************************************************************
+ECHO. & ECHO                             %username% & ECHO.
+GOTO EOF
+
+:Error_Stop
+ECHO. & ECHO                      Please exit the program now! & ECHO.
+ECHO      *********************************************************************
 pause
-exit
+GOTO EOF
+
+:Usage
+ECHO.
+ECHO %~nx0 is an batch program to automate the 
+ECHO installation of drivers on any Windows system.
+ECHO.
+ECHO The switches /? or /h or /H will bring up this guide.
+ECHO You may use either a slash '/' or dash '-' with switches.
+ECHO Usage is %~nx0 {/? ! -? ! /h ! -h ! /H ! -H}
+ECHO.
+ECHO /S or /SR or /K or /KR or /C or /CR will enable "Silent" mode 
+ECHO   which will not prompt for options but will execute
+ECHO   the batch with whatever options are set as default.
+ECHO.
+ECHO Examples:
+ECHO    "/S"  Silent install, Touchpad/HID drivers kept, exit no reboot.
+ECHO    "/SR" Silent install, Touchpad/HID drivers kept, exit and auto reboot.
+ECHO.
+ECHO    "/K"  Silent install, keeps only drivers for your OS, exit no reboot.
+ECHO    "/KR" Silent install, keeps only drivers for your OS, exit and auto reboot.
+ECHO.  
+ECHO    "/C"  Silent install, keeps all drivers, exit no reboot.
+ECHO    "/CR" Silent install, keeps all drivers, exit and auto reboot.
+ECHO.
+ECHO      *** Use Only One Silent Install Switch ***
+ECHO.
+ECHO Options to create restore point, delete Log file and Touchpad HID drivers
+ECHO are disabled when using silent install switches. 
+ECHO.
+ECHO Running %~nx0 requires Administrator rights!
+ECHO. & ECHO.
+ECHO Press any key to return to the command prompt...
+PAUSE > nul
+GOTO EOF
 
 :Elevate
-::Credit to JohnGray http://www.sevenforums.com/general-discussion/118408-programmatic-way-bat-file-determining-IF-elevated-command-prompt.html
-::  try to write a zero-byte file to a system directory
-::    IF successful, we are in Elevated mode and delete the file
-::    IF unsuccessful, avoid the "Access is denied" message
-SETlocal
-:: arbitrary choice of system directory and filename
-SET tst="%windir%\$del_me$"
-:: the first brackets are required to avoid getting the message,
-::   even though 2 is redirected to nul.  no, I don't know why.
-(type nul>%tst%) 2>nul && (del %tst% & SET elev=t) || (SET elev=)
-IF defined elev (GOTO PROCESSOR) else ("%cur%\bin\elevate.cmd" "%pd%\DP_Install_Tool.cmd")
-endlocal
+::checkPrivileges 
+MKDIR "%windir%\OEAdminCheck" 
+IF '%errorlevel%' == '0' (RMDIR "%windir%\OEAdminCheck" & GOTO gotPrivileges) ELSE (GOTO getPrivileges) 
+:getPrivileges 
+CLS
+SET "O_OEGP=%temp%\OEgetPrivileges.vbs"
+ECHO>"%O_OEGP%" Set UAC = CreateObject^("Shell.Application"^)
+IF DEFINED PARAMS (
+  ECHO>>"%O_OEGP%" UAC.ShellExecute "%~dpnx0", "%params%", "", "runas", 1
+  ) ELSE (
+  ECHO>>"%O_OEGP%" UAC.ShellExecute "%~dpnx0", "", "", "runas", 1
+)
+START /W %windir%\System32\wscript.exe "%O_OEGP%"
+EXIT /B
+:gotPrivileges
+IF /I EXIST "%O_OEGP%" (DEL /F /Q "%O_OEGP%") >nul
+GOTO Processor
+
+:EOF
