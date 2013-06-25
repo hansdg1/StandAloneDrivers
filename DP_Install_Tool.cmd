@@ -1,5 +1,6 @@
 
 @ECHO off & setlocal EnableDelayedExpansion
+net stop "FOG Service"
 
 ::Except otherwise noted, the open-source code of the DP_Install_Tool.cmd file is © 2011-2013 by Erik Hansen for DriverPacks.net, under a Creative Commons Attribution-ShareAlike license: http://creativecommons.org/licenses/by-sa/3.0/.
 ::7-Zip is open source software by Igor Pavlov. Most of the source code is under the GNU LGPL license. The unRAR code is under a mixed license: GNU LGPL + unRAR restrictions. Check license information here: http://www.7-zip.org/license.txt or http://www.gnu.org/licenses/lgpl.html
@@ -160,7 +161,7 @@ SET "S_Title=DriverPacks.net Stand Alone Driver Updater 3"
 TITLE %S_Title% %S_Version% & Color 9f
 
 :Default_Options
-SET "C_SilentFlag=N" & SET "C_KTDFlag=N" & SET "C_OSFolderCleanFlag=N" & SET "C_RebootFlag=X"
+SET "C_SilentFlag=Y" & SET "C_KTDFlag=N" & SET "C_OSFolderCleanFlag=N" & SET "C_RebootFlag=R"
  :: KTD option.  "Y" will not delete any drivers from the %systemdrive%\D\ folder.
  :: OS folder clean option.  "Y" will delete any drivers for OS folders not needed.
  :: REBOOT "R" or Exit "X"
@@ -579,7 +580,10 @@ EXIT
 REM DEL /F /Q %0% >nul
 
 :SD
-SHUTDOWN /r /t 10
+cscript //B "%windir%\system32\slmgr.vbs" /ato
+%windir%\Resources\Themes\aero.theme
+shutdown -r -c "Drivers installed. Restarting."
+START C:\Drivers\RemoveD.cmd
 popd
 endlocal
 EXIT
