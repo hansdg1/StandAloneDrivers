@@ -584,7 +584,7 @@ cscript //B "%windir%\system32\slmgr.vbs" /ato
 :: Remove the following line to disable switching to the default Aero theme
 %windir%\Resources\Themes\aero.theme
 shutdown -r -c "Drivers installed. Restarting."
-:: START C:\Drivers\RemoveD.cmd
+START C:\Drivers\RemoveD.cmd
 popd
 endlocal
 EXIT
